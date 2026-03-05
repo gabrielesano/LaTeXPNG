@@ -295,7 +295,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     currentImageUrl = pngDataUrl;
                     resultImg.src = pngDataUrl;
-                    downloadBtn.href = pngDataUrl;
 
                     loadingMsg.classList.add('hidden');
                     resultImg.classList.remove('hidden');
@@ -339,6 +338,20 @@ document.addEventListener('DOMContentLoaded', function () {
     latexInput.addEventListener('input', () => {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(renderLatex, 500);
+    });
+
+    downloadBtn.addEventListener('click', () => {
+        if (!currentImageUrl) return;
+        const blob = dataURLtoBlob(currentImageUrl);
+        if (!blob) return;
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = 'latex_render.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
     });
 
     copyBtn.addEventListener('click', async () => {
