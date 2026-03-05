@@ -33,19 +33,6 @@ Click **Download PNG** to save or **Copy Image** to copy to clipboard.
 
 Equations are automatically saved to **Recent** history. Click the ☆ star icon to bookmark an equation for permanent access.
 
-## Project structure
-LaTeXPNG/
-├── manifest.json       # Extension manifest (MV3)
-├── popup.html          # Popup UI
-├── popup.css           # Styles
-├── popup.js            # Logic: rendering, settings, history, bookmarks
-├── lib/
-│   └── tex-svg-full.js # MathJax (bundled)
-└── images/
-├── icon16.png
-├── icon48.png
-└── icon128.png
-
 ## Third-party licenses
 
 This extension bundles [MathJax](https://www.mathjax.org/), 
