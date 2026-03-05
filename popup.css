@@ -1,0 +1,276 @@
+/* === Base === */
+* {
+    box-sizing: border-box;
+}
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    width: 380px;
+    padding: 15px;
+    background-color: #f9f9f9;
+    margin: 0;
+}
+h2 {
+    margin-top: 0;
+    text-align: center;
+    color: #333;
+    font-size: 16px;
+}
+
+/* === Textarea === */
+textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: "Consolas", "Courier New", monospace;
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* === Settings panel === */
+.settings-panel {
+    margin-top: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 13px;
+}
+.settings-panel summary {
+    padding: 8px 10px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #555;
+    user-select: none;
+}
+.settings-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 12px;
+    align-items: center;
+    padding: 0 10px 10px;
+}
+.settings-grid label {
+    color: #555;
+    white-space: nowrap;
+}
+.color-options {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.color-swatch {
+    width: 24px;
+    height: 24px;
+    border: 2px solid #ccc;
+    border-radius: 50%;
+    cursor: pointer;
+    padding: 0;
+    transition: border-color 0.15s;
+}
+.color-swatch:hover {
+    border-color: #888;
+}
+.color-swatch.active {
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0,123,255,0.3);
+}
+#customColor {
+    width: 28px;
+    height: 24px;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    background: none;
+}
+#dpiSelect {
+    padding: 4px 6px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 13px;
+}
+#paddingRange {
+    width: 100%;
+}
+
+/* === Result container === */
+#resultContainer {
+    margin-top: 12px;
+    padding: 10px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+.preview-box {
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    position: relative;
+}
+#resultImg {
+    max-width: 100%;
+}
+.status-msg {
+    font-size: 13px;
+    color: #888;
+}
+.status-msg.error {
+    color: #d93025;
+    font-weight: 500;
+}
+
+/* === Action buttons === */
+.action-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    justify-content: center;
+}
+.action-btn {
+    flex-grow: 1;
+    text-align: center;
+    padding: 9px 10px;
+    border: none;
+    border-radius: 4px;
+    background-color: #007bff;
+    color: white;
+    font-size: 13px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 0.15s;
+}
+.action-btn:hover {
+    background-color: #0056b3;
+}
+#copyBtn.copied {
+    background-color: #28a745;
+}
+.bookmark-btn {
+    flex-grow: 0;
+    width: 40px;
+    font-size: 18px;
+    padding: 6px 0;
+    background-color: #f0f0f0;
+    color: #888;
+    line-height: 1;
+}
+.bookmark-btn:hover {
+    background-color: #e0e0e0;
+    color: #f5a623;
+}
+.bookmark-btn.active {
+    background-color: #fff8e1;
+    color: #f5a623;
+}
+
+/* === Library: tabs + lists === */
+.library-section {
+    margin-top: 14px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+    overflow: hidden;
+}
+.tab-bar {
+    display: flex;
+    border-bottom: 1px solid #ddd;
+}
+.tab-btn {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    background: #f5f5f5;
+    font-size: 13px;
+    font-weight: 600;
+    color: #888;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.tab-btn:hover {
+    background: #eee;
+}
+.tab-btn.active {
+    background: #fff;
+    color: #333;
+    border-bottom: 2px solid #007bff;
+}
+.tab-content {
+    display: none;
+    max-height: 180px;
+    overflow-y: auto;
+}
+.tab-content.active {
+    display: block;
+}
+.eq-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.eq-list li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.eq-list li:last-child {
+    border-bottom: none;
+}
+.eq-list li:hover {
+    background: #f5f8ff;
+}
+.eq-latex {
+    flex: 1;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 12px;
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.eq-star {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    color: #ccc;
+    padding: 0 2px;
+    transition: color 0.15s;
+}
+.eq-star:hover {
+    color: #f5a623;
+}
+.eq-star.bookmarked {
+    color: #f5a623;
+}
+.eq-delete {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    color: #ccc;
+    padding: 0 2px;
+    transition: color 0.15s;
+}
+.eq-delete:hover {
+    color: #d93025;
+}
+.empty-msg {
+    text-align: center;
+    color: #aaa;
+    font-size: 12px;
+    padding: 14px 10px;
+    margin: 0;
+}
+
+/* === Utility === */
+.hidden {
+    display: none !important;
+}
