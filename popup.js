@@ -27,8 +27,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // ===================== State =====================
     let debounceTimer;
-    let currentImageUrl = null;
-    let pendingBlobUrl = null; // track blob URL for leak prevention
+    let currentBlob = null;      // PNG blob for download/copy
+    let previewBlobUrl = null;    // blob URL for the <img> preview
+    let pendingSvgBlobUrl = null; // track SVG blob URL for leak prevention
     let currentLatex = '';
 
     // Defaults
@@ -117,21 +118,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ===================== Helpers =====================
-    const dataURLtoBlob = (dataUrl) => {
-        const parts = dataUrl.split(',');
-        const mimeType = parts[0].match(/:(.*?);/)?.[1];
-        if (!mimeType) return null;
-        try {
-            const byteString = atob(parts[1]);
-            const ab = new ArrayBuffer(byteString.length);
-            const ia = new Uint8Array(ab);
-            for (let i = 0; i < byteString.length; i++) { ia[i] = byteString.charCodeAt(i); }
-            return new Blob([ab], { type: mimeType });
-        } catch (error) {
-            console.error('Error converting data URL to blob:', error);
-            return null;
-        }
-    };
 
     function isBookmarked(latex) {
         return bookmarks.some((b) => b.latex === latex);
@@ -241,22 +227,29 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ===================== Core Rendering =====================
+    function cleanup() {
+        if (pendingSvgBlobUrl) {
+            URL.revokeObjectURL(pendingSvgBlobUrl);
+            pendingSvgBlobUrl = null;
+        }
+        if (previewBlobUrl) {
+            URL.revokeObjectURL(previewBlobUrl);
+            previewBlobUrl = null;
+        }
+        currentBlob = null;
+    }
+
     const renderLatex = () => {
         const latexCode = latexInput.value.trim();
         currentLatex = latexCode;
 
-        // Revoke any pending blob URL to prevent leaks
-        if (pendingBlobUrl) {
-            URL.revokeObjectURL(pendingBlobUrl);
-            pendingBlobUrl = null;
-        }
+        cleanup();
 
         if (!latexCode) {
             resultContainer.classList.add('hidden');
             actionButtons.classList.add('hidden');
             errorMsg.classList.add('hidden');
             loadingMsg.classList.add('hidden');
-            currentImageUrl = null;
             updateBookmarkCurrentBtn();
             return;
         }
@@ -280,8 +273,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 const svgMarkup = svgElement.outerHTML;
                 const image = new Image();
                 const svgBlob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
-                const url = URL.createObjectURL(svgBlob);
-                pendingBlobUrl = url; // track it
+                const svgUrl = URL.createObjectURL(svgBlob);
+                pendingSvgBlobUrl = svgUrl;
 
                 image.onload = () => {
                     const sf = settings.scaleFactor;
@@ -291,32 +284,38 @@ document.addEventListener('DOMContentLoaded', function () {
                     canvas.height = (image.height + pad * 2) * sf;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(image, pad * sf, pad * sf, image.width * sf, image.height * sf);
-                    const pngDataUrl = canvas.toDataURL('image/png');
 
-                    currentImageUrl = pngDataUrl;
-                    resultImg.src = pngDataUrl;
+                    // Use toBlob — never creates a huge data URL string
+                    canvas.toBlob((blob) => {
+                        if (!blob) {
+                            showError('Failed to generate PNG.');
+                            return;
+                        }
 
-                    loadingMsg.classList.add('hidden');
-                    resultImg.classList.remove('hidden');
-                    resultContainer.classList.remove('hidden');
-                    actionButtons.classList.remove('hidden');
+                        currentBlob = blob;
+                        previewBlobUrl = URL.createObjectURL(blob);
+                        resultImg.src = previewBlobUrl;
 
-                    URL.revokeObjectURL(url);
-                    pendingBlobUrl = null;
+                        loadingMsg.classList.add('hidden');
+                        resultImg.classList.remove('hidden');
+                        resultContainer.classList.remove('hidden');
+                        actionButtons.classList.remove('hidden');
 
-                    updateBookmarkCurrentBtn();
+                        URL.revokeObjectURL(svgUrl);
+                        pendingSvgBlobUrl = null;
 
-                    // Save to history on successful render
-                    addToHistory(latexCode);
+                        updateBookmarkCurrentBtn();
+                        addToHistory(latexCode);
+                    }, 'image/png');
                 };
 
                 image.onerror = () => {
-                    URL.revokeObjectURL(url);
-                    pendingBlobUrl = null;
+                    URL.revokeObjectURL(svgUrl);
+                    pendingSvgBlobUrl = null;
                     showError('Failed to render SVG to image.');
                 };
 
-                image.src = url;
+                image.src = svgUrl;
             })
             .catch((err) => {
                 console.error('MathJax Rendering Error:', err);
@@ -331,7 +330,7 @@ document.addEventListener('DOMContentLoaded', function () {
         errorMsg.classList.remove('hidden');
         resultContainer.classList.remove('hidden');
         actionButtons.classList.add('hidden');
-        currentImageUrl = null;
+        currentBlob = null;
     }
 
     // ===================== Event Listeners =====================
@@ -341,32 +340,28 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     downloadBtn.addEventListener('click', () => {
-        if (!currentImageUrl) return;
-        const blob = dataURLtoBlob(currentImageUrl);
-        if (!blob) return;
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = 'latex_render.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
+        if (!currentBlob) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            chrome.runtime.sendMessage({
+                action: 'download',
+                dataUrl: reader.result,
+                filename: 'latex_render.png'
+            });
+        };
+        reader.readAsDataURL(currentBlob);
     });
 
     copyBtn.addEventListener('click', async () => {
-        if (!currentImageUrl) return;
+        if (!currentBlob) return;
         try {
-            const blob = dataURLtoBlob(currentImageUrl);
-            if (blob) {
-                await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-                copyBtn.textContent = 'Copied!';
-                copyBtn.classList.add('copied');
-                setTimeout(() => {
-                    copyBtn.textContent = 'Copy Image';
-                    copyBtn.classList.remove('copied');
-                }, 2000);
-            }
+            await navigator.clipboard.write([new ClipboardItem({ [currentBlob.type]: currentBlob })]);
+            copyBtn.textContent = 'Copied!';
+            copyBtn.classList.add('copied');
+            setTimeout(() => {
+                copyBtn.textContent = 'Copy Image';
+                copyBtn.classList.remove('copied');
+            }, 2000);
         } catch (err) {
             console.error('Failed to copy image:', err);
         }

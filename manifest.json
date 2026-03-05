@@ -3,7 +3,10 @@
   "name": "LaTeX to PNG Converter",
   "version": "1.3",
   "description": "Converts LaTeX math (including Dirac braket notation) to a transparent, high-resolution PNG.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "downloads"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
