@@ -8,6 +8,7 @@ FILES=(
     popup.js
     popup.css
     background.js
+    mathjax-config.js
     lib/
     images/
 )

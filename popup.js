@@ -721,7 +721,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     openTabBtn.addEventListener('click', () => {
         if (typeof chrome !== 'undefined' && chrome.tabs) {
-            chrome.tabs.create({ url: chrome.runtime.getURL('popup.html') });
+            chrome.tabs.create({ url: chrome.runtime.getURL('popup.html') + '?tab=1' });
         }
     });
 
@@ -734,8 +734,8 @@ document.addEventListener('DOMContentLoaded', function () {
         setTimeout(renderLatex, 50);
     });
 
-    // Hide the button when already running as a full tab (viewport wider than popup)
-    if (document.documentElement.clientWidth > 500) {
+    // Hide the button when already running as a full tab (opened via the button itself)
+    if (new URLSearchParams(location.search).get('tab') === '1') {
         openTabBtn.classList.add('hidden');
     }
 
