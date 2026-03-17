@@ -1,3 +1,101 @@
+/* === Design Tokens === */
+:root {
+    /* Surfaces */
+    --color-bg:               #f9f9f9;
+    --color-surface:          #ffffff;
+    --color-surface-muted:    #f5f5f5;   /* tab inactive, secondary btn */
+    --color-surface-hover:    #eeeeee;   /* tab hover, secondary btn hover */
+    --color-surface-tint:     #f0f5ff;   /* primary-tinted hover (list items, autocomplete, open-tab) */
+    --color-bookmark-bg:      #fff8e1;   /* bookmark btn active bg */
+
+    /* Borders */
+    --color-border:           #dddddd;   /* panels, containers */
+    --color-border-input:     #cccccc;   /* inputs, selects, swatches */
+    --color-border-subtle:    #f0f0f0;   /* list item separators */
+
+    /* Text */
+    --color-text:             #333333;
+    --color-text-secondary:   #555555;   /* labels */
+    --color-text-muted:       #888888;   /* status msgs, inactive tabs */
+    --color-text-placeholder: #aaaaaa;   /* empty msgs, hints, inactive icons */
+
+    /* Primary */
+    --color-primary:          #007bff;
+    --color-primary-hover:    #0056b3;
+    --color-primary-muted:    #80a8e8;   /* hint text inside active autocomplete item */
+    --color-primary-shadow:   rgba(0, 123, 255, 0.3);
+
+    /* Semantic */
+    --color-success:          #28a745;
+    --color-danger:           #d93025;
+    --color-bookmark:         #f5a623;
+
+    /* Shadows */
+    --shadow-dropdown:        0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+@media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) {
+        /* Surfaces */
+        --color-bg:               #18181b;   /* zinc-950 */
+        --color-surface:          #27272a;   /* zinc-800 */
+        --color-surface-muted:    #313136;   /* slightly above surface */
+        --color-surface-hover:    #4a4a52;   /* hover state */
+        --color-surface-tint:     #1c2f4a;   /* dark blue tint */
+        --color-bookmark-bg:      #292008;   /* dark warm amber */
+
+        /* Borders */
+        --color-border:           #3f3f46;   /* zinc-700 */
+        --color-border-input:     #52525b;   /* zinc-600 */
+        --color-border-subtle:    #2d2d32;   /* very faint separator */
+
+        /* Text */
+        --color-text:             #e4e4e7;   /* zinc-200 */
+        --color-text-secondary:   #a1a1aa;   /* zinc-400 */
+        --color-text-muted:       #71717a;   /* zinc-500 */
+        --color-text-placeholder: #52525b;   /* zinc-600 */
+
+        /* Primary — blue-500 works as btn bg (white text ~4.5:1) and accent on dark */
+        --color-primary:          #3b82f6;
+        --color-primary-hover:    #60a5fa;   /* blue-400 */
+        --color-primary-muted:    #93c5fd;   /* blue-300, hint text */
+        --color-primary-shadow:   rgba(59, 130, 246, 0.35);
+
+        /* Semantic */
+        --color-success:          #34d399;   /* emerald-400 */
+        --color-danger:           #f87171;   /* red-400 */
+        --color-bookmark:         #fbbf24;   /* amber-400 */
+
+        /* Shadows */
+        --shadow-dropdown:        0 2px 12px rgba(0, 0, 0, 0.5);
+    }
+}
+
+/* Forced dark — overrides system preference when data-theme="dark" is set on <html> */
+html[data-theme="dark"] {
+    --color-bg:               #18181b;
+    --color-surface:          #27272a;
+    --color-surface-muted:    #313136;
+    --color-surface-hover:    #4a4a52;
+    --color-surface-tint:     #1c2f4a;
+    --color-bookmark-bg:      #292008;
+    --color-border:           #3f3f46;
+    --color-border-input:     #52525b;
+    --color-border-subtle:    #2d2d32;
+    --color-text:             #e4e4e7;
+    --color-text-secondary:   #a1a1aa;
+    --color-text-muted:       #71717a;
+    --color-text-placeholder: #52525b;
+    --color-primary:          #3b82f6;
+    --color-primary-hover:    #60a5fa;
+    --color-primary-muted:    #93c5fd;
+    --color-primary-shadow:   rgba(59, 130, 246, 0.35);
+    --color-success:          #34d399;
+    --color-danger:           #f87171;
+    --color-bookmark:         #fbbf24;
+    --shadow-dropdown:        0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
 /* === Base === */
 * {
     box-sizing: border-box;
@@ -6,7 +104,8 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     width: 380px;
     padding: 15px;
-    background-color: #f9f9f9;
+    background-color: var(--color-bg);
+    color: var(--color-text);
     margin: 0;
 }
 .popup-header {
@@ -18,7 +117,7 @@ h2 {
     flex: 1;
     margin: 0;
     text-align: center;
-    color: #333;
+    color: var(--color-text);
     font-size: 16px;
 }
 .open-tab-btn {
@@ -26,25 +125,27 @@ h2 {
     background: none;
     border: none;
     cursor: pointer;
-    color: #bbb;
+    color: var(--color-text-placeholder);
     padding: 4px;
     border-radius: 4px;
     line-height: 1;
     transition: color 0.15s, background-color 0.15s;
 }
 .open-tab-btn:hover {
-    color: #007bff;
-    background-color: #f0f5ff;
+    color: var(--color-primary);
+    background-color: var(--color-surface-tint);
 }
 
 /* === Textarea === */
 textarea {
     width: 100%;
     padding: 8px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--color-border-input);
     border-radius: 4px;
     font-size: 14px;
     font-family: "Consolas", "Courier New", monospace;
+    background-color: var(--color-surface);
+    color: var(--color-text);
     resize: vertical;
     min-height: 80px;
 }
@@ -52,16 +153,16 @@ textarea {
 /* === Settings panel === */
 .settings-panel {
     margin-top: 10px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--color-border);
     border-radius: 4px;
-    background: #fff;
+    background: var(--color-surface);
     font-size: 13px;
 }
 .settings-panel summary {
     padding: 8px 10px;
     cursor: pointer;
     font-weight: 600;
-    color: #555;
+    color: var(--color-text-secondary);
     user-select: none;
 }
 .settings-grid {
@@ -72,7 +173,7 @@ textarea {
     padding: 0 10px 10px;
 }
 .settings-grid label {
-    color: #555;
+    color: var(--color-text-secondary);
     white-space: nowrap;
 }
 .color-options {
@@ -83,18 +184,18 @@ textarea {
 .color-swatch {
     width: 24px;
     height: 24px;
-    border: 2px solid #ccc;
+    border: 2px solid var(--color-border-input);
     border-radius: 50%;
     cursor: pointer;
     padding: 0;
     transition: border-color 0.15s;
 }
 .color-swatch:hover {
-    border-color: #888;
+    border-color: var(--color-text-muted);
 }
 .color-swatch.active {
-    border-color: #007bff;
-    box-shadow: 0 0 0 2px rgba(0,123,255,0.3);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary-shadow);
 }
 #customColor {
     width: 28px;
@@ -106,9 +207,11 @@ textarea {
 }
 #dpiSelect {
     padding: 4px 6px;
-    border: 1px solid #ccc;
+    border: 1px solid var(--color-border-input);
     border-radius: 4px;
     font-size: 13px;
+    background-color: var(--color-surface);
+    color: var(--color-text);
 }
 #paddingRange {
     width: 100%;
@@ -118,8 +221,8 @@ textarea {
 #resultContainer {
     margin-top: 12px;
     padding: 10px;
-    background-color: #fff;
-    border: 1px solid #ddd;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: 4px;
 }
 .preview-box {
@@ -135,10 +238,10 @@ textarea {
 }
 .status-msg {
     font-size: 13px;
-    color: #888;
+    color: var(--color-text-muted);
 }
 .status-msg.error {
-    color: #d93025;
+    color: var(--color-danger);
     font-weight: 500;
 }
 
@@ -155,7 +258,7 @@ textarea {
     padding: 9px 10px;
     border: none;
     border-radius: 4px;
-    background-color: #007bff;
+    background-color: var(--color-primary);
     color: white;
     font-size: 13px;
     cursor: pointer;
@@ -163,59 +266,59 @@ textarea {
     transition: background-color 0.15s;
 }
 .action-btn:hover {
-    background-color: #0056b3;
+    background-color: var(--color-primary-hover);
 }
 #copyBtn.copied {
-    background-color: #28a745;
+    background-color: var(--color-success);
 }
 .bookmark-btn {
     flex-grow: 0;
     width: 40px;
     font-size: 18px;
     padding: 6px 0;
-    background-color: #f0f0f0;
-    color: #888;
+    background-color: var(--color-surface-muted);
+    color: var(--color-text-muted);
     line-height: 1;
 }
 .bookmark-btn:hover {
-    background-color: #e0e0e0;
-    color: #f5a623;
+    background-color: var(--color-surface-hover);
+    color: var(--color-bookmark);
 }
 .bookmark-btn.active {
-    background-color: #fff8e1;
-    color: #f5a623;
+    background-color: var(--color-bookmark-bg);
+    color: var(--color-bookmark);
 }
 
 /* === Library: tabs + lists === */
 .library-section {
     margin-top: 14px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--color-border);
     border-radius: 4px;
-    background: #fff;
+    background: var(--color-surface);
     overflow: hidden;
 }
 .tab-bar {
     display: flex;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--color-border);
 }
 .tab-btn {
     flex: 1;
     padding: 8px;
     border: none;
-    background: #f5f5f5;
+    background: var(--color-surface-muted);
     font-size: 13px;
     font-weight: 600;
-    color: #888;
+    color: var(--color-text-muted);
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
 }
 .tab-btn:hover {
-    background: #eee;
+    background: var(--color-surface-hover);
 }
 .tab-btn.active {
-    background: #fff;
-    color: #333;
-    border-bottom: 2px solid #007bff;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-bottom: 2px solid var(--color-primary);
 }
 .tab-content {
     display: none;
@@ -235,7 +338,7 @@ textarea {
     align-items: center;
     gap: 6px;
     padding: 6px 10px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--color-border-subtle);
     cursor: pointer;
     transition: background 0.1s;
 }
@@ -243,13 +346,13 @@ textarea {
     border-bottom: none;
 }
 .eq-list li:hover {
-    background: #f5f8ff;
+    background: var(--color-surface-tint);
 }
 .eq-latex {
     flex: 1;
     font-family: "Consolas", "Courier New", monospace;
     font-size: 12px;
-    color: #333;
+    color: var(--color-text);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -260,15 +363,15 @@ textarea {
     border: none;
     font-size: 16px;
     cursor: pointer;
-    color: #ccc;
+    color: var(--color-text-placeholder);
     padding: 0 2px;
     transition: color 0.15s;
 }
 .eq-star:hover {
-    color: #f5a623;
+    color: var(--color-bookmark);
 }
 .eq-star.bookmarked {
-    color: #f5a623;
+    color: var(--color-bookmark);
 }
 .eq-delete {
     flex-shrink: 0;
@@ -276,16 +379,16 @@ textarea {
     border: none;
     font-size: 14px;
     cursor: pointer;
-    color: #ccc;
+    color: var(--color-text-placeholder);
     padding: 0 2px;
     transition: color 0.15s;
 }
 .eq-delete:hover {
-    color: #d93025;
+    color: var(--color-danger);
 }
 .empty-msg {
     text-align: center;
-    color: #aaa;
+    color: var(--color-text-placeholder);
     font-size: 12px;
     padding: 14px 10px;
     margin: 0;
@@ -295,10 +398,10 @@ textarea {
 .latex-ac {
     position: absolute;
     z-index: 100;
-    background: #fff;
-    border: 1px solid #ccc;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-input);
     border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-dropdown);
     max-height: 180px;
     overflow-y: auto;
     min-width: 160px;
@@ -310,21 +413,21 @@ textarea {
     padding: 5px 10px;
     font-family: "Consolas", "Courier New", monospace;
     font-size: 13px;
-    color: #333;
+    color: var(--color-text);
     cursor: pointer;
     white-space: nowrap;
 }
 .latex-ac-item:hover,
 .latex-ac-item.active {
-    background: #f0f5ff;
-    color: #007bff;
+    background: var(--color-surface-tint);
+    color: var(--color-primary);
 }
 .latex-ac-item .ac-args {
-    color: #aaa;
+    color: var(--color-text-placeholder);
     font-size: 12px;
 }
 .latex-ac-item.active .ac-args {
-    color: #80a8e8;
+    color: var(--color-primary-muted);
 }
 
 /* === Utility === */

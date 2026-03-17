@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>LaTeX to PNG</title>
@@ -8,7 +8,14 @@
 <body>
     <div class="popup-header">
         <h2>LaTeX to PNG Converter</h2>
-        <button id="openTabBtn" class="open-tab-btn" title="Open in new tab">
+        <button id="themeToggleBtn" class="open-tab-btn" title="Theme: System (follows OS)" aria-label="Theme: System (follows OS)">
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor"
+                 stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="1" y="2" width="14" height="10" rx="1.5"/>
+                <polyline points="5,14 8,12 11,14"/>
+            </svg>
+        </button>
+        <button id="openTabBtn" class="open-tab-btn" title="Open in new tab" aria-label="Open in new tab">
             <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor"
                  stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M7 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8A1.5 1.5 0 0 0 13 12.5V9"/>
@@ -18,7 +25,12 @@
         </button>
     </div>
     
-    <textarea id="latexInput" rows="5">\frac{n!}{k!(n-k)!} = \binom{n}{k}</textarea>
+    <textarea id="latexInput" rows="5"
+              aria-label="LaTeX expression"
+              spellcheck="false"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off">\frac{n!}{k!(n-k)!} = \binom{n}{k}</textarea>
     
     <!-- Settings (collapsible) -->
     <details id="settingsPanel" class="settings-panel">
@@ -48,8 +60,8 @@
     <!-- Result preview -->
     <div id="resultContainer" class="hidden">
         <div class="preview-box">
-            <div id="loadingMsg" class="status-msg hidden">Rendering...</div>
-            <div id="errorMsg" class="status-msg error hidden"></div>
+            <div id="loadingMsg" class="status-msg hidden" aria-live="polite">Rendering...</div>
+            <div id="errorMsg" class="status-msg error hidden" aria-live="assertive"></div>
             <img id="resultImg" alt="Rendered LaTeX">
         </div>
     </div>

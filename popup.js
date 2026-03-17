@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const loadingMsg = document.getElementById('loadingMsg');
     const errorMsg = document.getElementById('errorMsg');
     const openTabBtn = document.getElementById('openTabBtn');
+    const themeToggleBtn = document.getElementById('themeToggleBtn');
 
     // Settings
     const colorSwatches = document.querySelectorAll('.color-swatch');
@@ -33,6 +34,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let previewBlobUrl = null;    // blob URL for the <img> preview
     let pendingSvgBlobUrl = null; // track SVG blob URL for leak prevention
     let currentLatex = '';
+    let renderGeneration = 0;    // incremented on each render; guards stale async callbacks
 
     // Defaults
     let settings = {
@@ -43,17 +45,44 @@ document.addEventListener('DOMContentLoaded', function () {
     let history = [];   // [{ latex, timestamp }]  max 5
     let bookmarks = []; // [{ latex, timestamp }]
 
+    // ===================== Theme =====================
+    let currentTheme = 'system'; // 'system' | 'light' | 'dark'
+
+    const THEME_CYCLE = { system: 'light', light: 'dark', dark: 'system' };
+
+    const THEME_LABELS = {
+        system: 'Theme: System (follows OS)',
+        light:  'Theme: Light',
+        dark:   'Theme: Dark',
+    };
+
+    // SVG icon strings — one per state, rendered via innerHTML (static strings, no user data)
+    const THEME_ICONS = {
+        system: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="2" width="14" height="10" rx="1.5"/><polyline points="5,14 8,12 11,14"/></svg>',
+        light:  '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><line x1="8" y1="1" x2="8" y2="3.5"/><line x1="8" y1="12.5" x2="8" y2="15"/><line x1="1" y1="8" x2="3.5" y2="8"/><line x1="12.5" y1="8" x2="15" y2="8"/><line x1="3.4" y1="3.4" x2="5.2" y2="5.2"/><line x1="10.8" y1="10.8" x2="12.6" y2="12.6"/><line x1="12.6" y1="3.4" x2="10.8" y2="5.2"/><line x1="5.2" y1="10.8" x2="3.4" y2="12.6"/></svg>',
+        dark:   '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10.5a6 6 0 0 1-7.5-7.5A6 6 0 1 0 13 10.5z"/></svg>',
+    };
+
+    function applyTheme(theme) {
+        currentTheme = theme;
+        document.documentElement.dataset.theme = theme;
+        themeToggleBtn.innerHTML = THEME_ICONS[theme];
+        themeToggleBtn.title = THEME_LABELS[theme];
+        themeToggleBtn.setAttribute('aria-label', THEME_LABELS[theme]);
+    }
+
     // ===================== Storage helpers =====================
     // Guard against running outside the extension context (e.g. opening popup.html directly).
     const storage = (typeof chrome !== 'undefined' && chrome.storage) ? chrome.storage.local : null;
 
     function loadAll(callback) {
-        if (!storage) { callback(); return; }
-        storage.get(['settings', 'history', 'bookmarks', 'draft'], (data) => {
+        if (!storage) { applyTheme('system'); callback(); return; }
+        storage.get(['settings', 'history', 'bookmarks', 'draft', 'theme'], (data) => {
             if (data.settings) settings = { ...settings, ...data.settings };
             if (data.history) history = data.history;
             if (data.bookmarks) bookmarks = data.bookmarks;
             if (data.draft) latexInput.value = data.draft;
+            applyTheme(data.theme || 'system');
             callback();
         });
     }
@@ -258,6 +287,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const renderLatex = () => {
         const latexCode = latexInput.value.trim();
         currentLatex = latexCode;
+        const generation = ++renderGeneration;
 
         cleanup();
 
@@ -279,6 +309,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         MathJax.tex2svgPromise(latexCode, { display: true })
             .then((node) => {
+                if (generation !== renderGeneration) return;
+
                 const svgElement = node.querySelector('svg');
                 svgElement.style.backgroundColor = 'transparent';
 
@@ -303,6 +335,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     // Use toBlob — never creates a huge data URL string
                     canvas.toBlob((blob) => {
+                        if (generation !== renderGeneration) return;
+
                         if (!blob) {
                             showError('Failed to generate PNG.');
                             return;
@@ -327,12 +361,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 image.onerror = () => {
                     URL.revokeObjectURL(svgUrl);
                     pendingSvgBlobUrl = null;
+                    if (generation !== renderGeneration) return;
                     showError('Failed to render SVG to image.');
                 };
 
                 image.src = svgUrl;
             })
             .catch((err) => {
+                if (generation !== renderGeneration) return;
                 console.error('MathJax Rendering Error:', err);
                 showError('Invalid LaTeX — check your syntax.');
             });
@@ -717,6 +753,12 @@ document.addEventListener('DOMContentLoaded', function () {
     bookmarkCurrentBtn.addEventListener('click', () => {
         if (!currentLatex) return;
         toggleBookmark(currentLatex);
+    });
+
+    themeToggleBtn.addEventListener('click', () => {
+        const next = THEME_CYCLE[currentTheme] || 'system';
+        applyTheme(next);
+        if (storage) storage.set({ theme: next });
     });
 
     openTabBtn.addEventListener('click', () => {
