@@ -159,6 +159,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function loadEquation(latex) {
         latexInput.value = latex;
         latexInput.focus();
+        hideDropdown();
         renderLatex();
     }
 
@@ -346,6 +347,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function handleBracketCompletion(e) {
         if (!(e.key in BRACKET_PAIRS)) return;
+        hideDropdown();
 
         const start = latexInput.selectionStart;
         const end = latexInput.selectionEnd;
@@ -371,6 +373,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function handleEnvironmentCompletion(e) {
+        if (e.defaultPrevented) return;
         if (e.key !== 'Enter') return;
         if (latexInput.selectionStart !== latexInput.selectionEnd) return;
 
@@ -398,8 +401,262 @@ document.addEventListener('DOMContentLoaded', function () {
         debounceTimer = setTimeout(renderLatex, 500);
     }
 
+    // ===================== Command Autocomplete =====================
+
+    const LATEX_COMMANDS = [
+        // Fractions / roots
+        { cmd: '\\frac',           insert: '\\frac{}{}',          cursorBack: 3 },
+        { cmd: '\\dfrac',          insert: '\\dfrac{}{}',         cursorBack: 3 },
+        { cmd: '\\tfrac',          insert: '\\tfrac{}{}',         cursorBack: 3 },
+        { cmd: '\\sqrt',           insert: '\\sqrt{}',            cursorBack: 1 },
+        // Integrals / sums
+        { cmd: '\\int',            insert: '\\int',               cursorBack: 0 },
+        { cmd: '\\iint',           insert: '\\iint',              cursorBack: 0 },
+        { cmd: '\\iiint',          insert: '\\iiint',             cursorBack: 0 },
+        { cmd: '\\oint',           insert: '\\oint',              cursorBack: 0 },
+        { cmd: '\\sum',            insert: '\\sum',               cursorBack: 0 },
+        { cmd: '\\prod',           insert: '\\prod',              cursorBack: 0 },
+        // Relations
+        { cmd: '\\leq',            insert: '\\leq',               cursorBack: 0 },
+        { cmd: '\\geq',            insert: '\\geq',               cursorBack: 0 },
+        { cmd: '\\neq',            insert: '\\neq',               cursorBack: 0 },
+        { cmd: '\\approx',         insert: '\\approx',            cursorBack: 0 },
+        { cmd: '\\equiv',          insert: '\\equiv',             cursorBack: 0 },
+        { cmd: '\\sim',            insert: '\\sim',               cursorBack: 0 },
+        { cmd: '\\propto',         insert: '\\propto',            cursorBack: 0 },
+        // Arrows
+        { cmd: '\\to',             insert: '\\to',                cursorBack: 0 },
+        { cmd: '\\leftarrow',      insert: '\\leftarrow',         cursorBack: 0 },
+        { cmd: '\\rightarrow',     insert: '\\rightarrow',        cursorBack: 0 },
+        { cmd: '\\Rightarrow',     insert: '\\Rightarrow',        cursorBack: 0 },
+        { cmd: '\\Leftrightarrow', insert: '\\Leftrightarrow',    cursorBack: 0 },
+        { cmd: '\\mapsto',         insert: '\\mapsto',            cursorBack: 0 },
+        // Operators
+        { cmd: '\\sin',            insert: '\\sin',               cursorBack: 0 },
+        { cmd: '\\cos',            insert: '\\cos',               cursorBack: 0 },
+        { cmd: '\\tan',            insert: '\\tan',               cursorBack: 0 },
+        { cmd: '\\log',            insert: '\\log',               cursorBack: 0 },
+        { cmd: '\\ln',             insert: '\\ln',                cursorBack: 0 },
+        { cmd: '\\exp',            insert: '\\exp',               cursorBack: 0 },
+        { cmd: '\\lim',            insert: '\\lim',               cursorBack: 0 },
+        { cmd: '\\inf',            insert: '\\inf',               cursorBack: 0 },
+        { cmd: '\\sup',            insert: '\\sup',               cursorBack: 0 },
+        { cmd: '\\max',            insert: '\\max',               cursorBack: 0 },
+        { cmd: '\\min',            insert: '\\min',               cursorBack: 0 },
+        // Accents
+        { cmd: '\\hat',            insert: '\\hat{}',             cursorBack: 1 },
+        { cmd: '\\bar',            insert: '\\bar{}',             cursorBack: 1 },
+        { cmd: '\\vec',            insert: '\\vec{}',             cursorBack: 1 },
+        { cmd: '\\dot',            insert: '\\dot{}',             cursorBack: 1 },
+        { cmd: '\\ddot',           insert: '\\ddot{}',            cursorBack: 1 },
+        { cmd: '\\tilde',          insert: '\\tilde{}',           cursorBack: 1 },
+        { cmd: '\\overline',       insert: '\\overline{}',        cursorBack: 1 },
+        { cmd: '\\underline',      insert: '\\underline{}',       cursorBack: 1 },
+        // Delimiters
+        { cmd: '\\left',           insert: '\\left',              cursorBack: 0 },
+        { cmd: '\\right',          insert: '\\right',             cursorBack: 0 },
+        { cmd: '\\langle',         insert: '\\langle',            cursorBack: 0 },
+        { cmd: '\\rangle',         insert: '\\rangle',            cursorBack: 0 },
+        { cmd: '\\lfloor',         insert: '\\lfloor',            cursorBack: 0 },
+        { cmd: '\\rfloor',         insert: '\\rfloor',            cursorBack: 0 },
+        { cmd: '\\lceil',          insert: '\\lceil',             cursorBack: 0 },
+        { cmd: '\\rceil',          insert: '\\rceil',             cursorBack: 0 },
+        // Spacing / formatting
+        { cmd: '\\quad',           insert: '\\quad',              cursorBack: 0 },
+        { cmd: '\\qquad',          insert: '\\qquad',             cursorBack: 0 },
+        { cmd: '\\text',           insert: '\\text{}',            cursorBack: 1 },
+        { cmd: '\\mathrm',         insert: '\\mathrm{}',          cursorBack: 1 },
+        { cmd: '\\mathbf',         insert: '\\mathbf{}',          cursorBack: 1 },
+        { cmd: '\\mathcal',        insert: '\\mathcal{}',         cursorBack: 1 },
+        { cmd: '\\mathbb',         insert: '\\mathbb{}',          cursorBack: 1 },
+        // Misc
+        { cmd: '\\partial',        insert: '\\partial',           cursorBack: 0 },
+        { cmd: '\\nabla',          insert: '\\nabla',             cursorBack: 0 },
+        { cmd: '\\infty',          insert: '\\infty',             cursorBack: 0 },
+        { cmd: '\\forall',         insert: '\\forall',            cursorBack: 0 },
+        { cmd: '\\exists',         insert: '\\exists',            cursorBack: 0 },
+        { cmd: '\\in',             insert: '\\in',                cursorBack: 0 },
+        { cmd: '\\notin',          insert: '\\notin',             cursorBack: 0 },
+        { cmd: '\\subset',         insert: '\\subset',            cursorBack: 0 },
+        { cmd: '\\cup',            insert: '\\cup',               cursorBack: 0 },
+        { cmd: '\\cap',            insert: '\\cap',               cursorBack: 0 },
+        { cmd: '\\cdot',           insert: '\\cdot',              cursorBack: 0 },
+        { cmd: '\\times',          insert: '\\times',             cursorBack: 0 },
+        { cmd: '\\otimes',         insert: '\\otimes',            cursorBack: 0 },
+        { cmd: '\\oplus',          insert: '\\oplus',             cursorBack: 0 },
+        { cmd: '\\dagger',         insert: '\\dagger',            cursorBack: 0 },
+        { cmd: '\\hbar',           insert: '\\hbar',              cursorBack: 0 },
+    ];
+
+    const acDropdown = document.createElement('div');
+    acDropdown.className = 'latex-ac hidden';
+    document.body.appendChild(acDropdown);
+
+    let acQuery = '';
+    let acItems = [];
+    let acIndex = -1;
+
+    // Returns {top, left} in document coordinates just below the caret.
+    function getCaretCoords(el) {
+        const computed = window.getComputedStyle(el);
+        const elRect = el.getBoundingClientRect();
+
+        // Mirror div positioned exactly over the textarea using fixed coords.
+        const mirror = document.createElement('div');
+        Object.assign(mirror.style, {
+            position: 'fixed',
+            top: elRect.top + 'px',
+            left: elRect.left + 'px',
+            width: elRect.width + 'px',
+            boxSizing: 'border-box',
+            visibility: 'hidden',
+            overflow: 'hidden',
+            whiteSpace: 'pre-wrap',
+            wordWrap: 'break-word',
+            fontFamily: computed.fontFamily,
+            fontSize: computed.fontSize,
+            fontWeight: computed.fontWeight,
+            lineHeight: computed.lineHeight,
+            letterSpacing: computed.letterSpacing,
+            paddingTop: computed.paddingTop,
+            paddingRight: computed.paddingRight,
+            paddingBottom: computed.paddingBottom,
+            paddingLeft: computed.paddingLeft,
+            borderTopWidth: computed.borderTopWidth,
+            borderRightWidth: computed.borderRightWidth,
+            borderBottomWidth: computed.borderBottomWidth,
+            borderLeftWidth: computed.borderLeftWidth,
+            borderStyle: 'solid',
+            borderColor: 'transparent',
+        });
+        mirror.appendChild(document.createTextNode(el.value.slice(0, el.selectionStart)));
+        const marker = document.createElement('span');
+        marker.textContent = '\u200b'; // zero-width space
+        mirror.appendChild(marker);
+        document.body.appendChild(mirror);
+        const markerRect = marker.getBoundingClientRect();
+        document.body.removeChild(mirror);
+
+        return {
+            top:  markerRect.bottom + window.scrollY,
+            left: markerRect.left   + window.scrollX,
+        };
+    }
+
+    function scrollAcItemIntoView() {
+        if (acIndex < 0) return;
+        const items = acDropdown.querySelectorAll('.latex-ac-item');
+        if (items[acIndex]) items[acIndex].scrollIntoView({ block: 'nearest' });
+    }
+
+    function setAcIndex(index) {
+        acDropdown.querySelectorAll('.latex-ac-item').forEach((el, i) => {
+            el.classList.toggle('active', i === index);
+        });
+        acIndex = index;
+        scrollAcItemIntoView();
+    }
+
+    function applyCompletion(item) {
+        const pos   = latexInput.selectionStart;
+        const val   = latexInput.value;
+        const start = pos - acQuery.length;
+        latexInput.value = val.slice(0, start) + item.insert + val.slice(pos);
+        const newCursor = start + item.insert.length - item.cursorBack;
+        latexInput.selectionStart = newCursor;
+        latexInput.selectionEnd   = newCursor;
+        hideDropdown();
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(renderLatex, 500);
+        latexInput.focus();
+    }
+
+    function showDropdown(coords) {
+        acDropdown.innerHTML = '';
+        acItems.forEach((item, i) => {
+            const div = document.createElement('div');
+            div.className = 'latex-ac-item' + (i === acIndex ? ' active' : '');
+            const cmdSpan = document.createElement('span');
+            cmdSpan.textContent = item.cmd;
+            div.appendChild(cmdSpan);
+            if (item.insert !== item.cmd) {
+                const argsSpan = document.createElement('span');
+                argsSpan.className = 'ac-args';
+                argsSpan.textContent = item.insert.slice(item.cmd.length);
+                div.appendChild(argsSpan);
+            }
+            div.addEventListener('mousedown', (e) => {
+                e.preventDefault(); // keep textarea focused
+                applyCompletion(item);
+            });
+            acDropdown.appendChild(div);
+        });
+
+        const bodyWidth = document.body.offsetWidth;
+        acDropdown.style.top  = coords.top  + 'px';
+        acDropdown.style.left = Math.min(coords.left, bodyWidth - 180) + 'px';
+        acDropdown.classList.remove('hidden');
+    }
+
+    function hideDropdown() {
+        acDropdown.classList.add('hidden');
+        acItems = [];
+        acIndex = -1;
+        acQuery = '';
+    }
+
+    function updateAutocomplete() {
+        const pos = latexInput.selectionStart;
+        const val = latexInput.value;
+        // Scan back over word chars (letters + * for starred variants) to find \cmd
+        let i = pos;
+        while (i > 0 && /[a-zA-Z*]/.test(val[i - 1])) i--;
+        if (i > 0 && val[i - 1] === '\\') {
+            acQuery = val.slice(i - 1, pos); // includes the leading '\'
+            if (acQuery.length < 2) { hideDropdown(); return; }
+            const matches = LATEX_COMMANDS.filter(c => c.cmd.startsWith(acQuery));
+            if (matches.length === 0) { hideDropdown(); return; }
+            acItems = matches;
+            acIndex = -1;
+            showDropdown(getCaretCoords(latexInput));
+        } else {
+            hideDropdown();
+        }
+    }
+
+    function handleAutocompleteKeydown(e) {
+        if (acDropdown.classList.contains('hidden')) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setAcIndex((acIndex + 1) % acItems.length);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setAcIndex(acIndex <= 0 ? acItems.length - 1 : acIndex - 1);
+        } else if (e.key === 'Tab') {
+            // Tab always selects (first item if none highlighted)
+            e.preventDefault();
+            applyCompletion(acItems[acIndex >= 0 ? acIndex : 0]);
+        } else if (e.key === 'Enter' && acIndex >= 0) {
+            // Enter selects only when an item is explicitly highlighted,
+            // so a plain Enter still allows env-completion or newline.
+            e.preventDefault();
+            applyCompletion(acItems[acIndex]);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            hideDropdown();
+        }
+    }
+
+    // Dismiss when clicking outside the textarea and dropdown
+    document.addEventListener('mousedown', (e) => {
+        if (!acDropdown.contains(e.target) && e.target !== latexInput) {
+            hideDropdown();
+        }
+    });
+
     // ===================== Event Listeners =====================
     latexInput.addEventListener('keydown', (e) => {
+        handleAutocompleteKeydown(e);
         handleBracketCompletion(e);
         handleEnvironmentCompletion(e);
     });
@@ -407,6 +664,7 @@ document.addEventListener('DOMContentLoaded', function () {
     latexInput.addEventListener('input', () => {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(renderLatex, 500);
+        updateAutocomplete();
     });
 
     downloadBtn.addEventListener('click', () => {

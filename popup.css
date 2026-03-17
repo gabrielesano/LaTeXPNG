@@ -270,6 +270,42 @@ textarea {
     margin: 0;
 }
 
+/* === LaTeX Command Autocomplete === */
+.latex-ac {
+    position: absolute;
+    z-index: 100;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    max-height: 180px;
+    overflow-y: auto;
+    min-width: 160px;
+}
+.latex-ac-item {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 5px 10px;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 13px;
+    color: #333;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.latex-ac-item:hover,
+.latex-ac-item.active {
+    background: #f0f5ff;
+    color: #007bff;
+}
+.latex-ac-item .ac-args {
+    color: #aaa;
+    font-size: 12px;
+}
+.latex-ac-item.active .ac-args {
+    color: #80a8e8;
+}
+
 /* === Utility === */
 .hidden {
     display: none !important;
