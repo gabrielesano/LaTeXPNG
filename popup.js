@@ -42,9 +42,11 @@ document.addEventListener('DOMContentLoaded', function () {
     let bookmarks = []; // [{ latex, timestamp }]
 
     // ===================== Storage helpers =====================
-    const storage = chrome.storage.local;
+    // Guard against running outside the extension context (e.g. opening popup.html directly).
+    const storage = (typeof chrome !== 'undefined' && chrome.storage) ? chrome.storage.local : null;
 
     function loadAll(callback) {
+        if (!storage) { callback(); return; }
         storage.get(['settings', 'history', 'bookmarks'], (data) => {
             if (data.settings) settings = { ...settings, ...data.settings };
             if (data.history) history = data.history;
@@ -54,13 +56,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function saveSettings() {
-        storage.set({ settings });
+        if (storage) storage.set({ settings });
     }
     function saveHistory() {
-        storage.set({ history });
+        if (storage) storage.set({ history });
     }
     function saveBookmarks() {
-        storage.set({ bookmarks });
+        if (storage) storage.set({ bookmarks });
     }
 
     // ===================== Settings UI =====================
@@ -305,7 +307,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         pendingSvgBlobUrl = null;
 
                         updateBookmarkCurrentBtn();
-                        addToHistory(latexCode);
                     }, 'image/png');
                 };
 
@@ -333,7 +334,76 @@ document.addEventListener('DOMContentLoaded', function () {
         currentBlob = null;
     }
 
+    // ===================== Auto-completion =====================
+
+    const BRACKET_PAIRS = { '(': ')', '[': ']', '{': '}' };
+    const BACKSLASH_PAIRS = { '(': '\\)', '[': '\\]', '{': '\\}' };
+    const ENVIRONMENTS = new Set([
+        'align', 'align*', 'equation', 'equation*',
+        'matrix', 'pmatrix', 'bmatrix', 'vmatrix',
+        'cases', 'gathered', 'split',
+    ]);
+
+    function handleBracketCompletion(e) {
+        if (!(e.key in BRACKET_PAIRS)) return;
+
+        const start = latexInput.selectionStart;
+        const end = latexInput.selectionEnd;
+        const val = latexInput.value;
+        const prevChar = start > 0 ? val[start - 1] : '';
+        const closer = prevChar === '\\' ? BACKSLASH_PAIRS[e.key] : BRACKET_PAIRS[e.key];
+
+        e.preventDefault();
+
+        if (start !== end) {
+            const selected = val.slice(start, end);
+            latexInput.value = val.slice(0, start) + e.key + selected + closer + val.slice(end);
+            latexInput.selectionStart = start + 1;
+            latexInput.selectionEnd = end + 1;
+        } else {
+            latexInput.value = val.slice(0, start) + e.key + closer + val.slice(start);
+            latexInput.selectionStart = start + 1;
+            latexInput.selectionEnd = start + 1;
+        }
+
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(renderLatex, 500);
+    }
+
+    function handleEnvironmentCompletion(e) {
+        if (e.key !== 'Enter') return;
+        if (latexInput.selectionStart !== latexInput.selectionEnd) return;
+
+        const pos = latexInput.selectionStart;
+        const val = latexInput.value;
+        const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+        const lineText = val.slice(lineStart, pos);
+        const match = lineText.match(/\\begin\{([^}]+)\}\s*$/);
+        if (!match) return;
+
+        const envName = match[1];
+        if (!ENVIRONMENTS.has(envName)) return;
+
+        e.preventDefault();
+
+        const indent = lineText.match(/^(\s*)/)[1];
+        const inner = '\n' + indent + '    ';
+        const closing = '\n' + indent + '\\end{' + envName + '}';
+        latexInput.value = val.slice(0, pos) + inner + closing + val.slice(pos);
+        const cursorPos = pos + inner.length;
+        latexInput.selectionStart = cursorPos;
+        latexInput.selectionEnd = cursorPos;
+
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(renderLatex, 500);
+    }
+
     // ===================== Event Listeners =====================
+    latexInput.addEventListener('keydown', (e) => {
+        handleBracketCompletion(e);
+        handleEnvironmentCompletion(e);
+    });
+
     latexInput.addEventListener('input', () => {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(renderLatex, 500);
@@ -343,11 +413,14 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!currentBlob) return;
         const reader = new FileReader();
         reader.onload = () => {
-            chrome.runtime.sendMessage({
-                action: 'download',
-                dataUrl: reader.result,
-                filename: 'latex_render.png'
-            });
+            if (typeof chrome !== 'undefined' && chrome.runtime) {
+                chrome.runtime.sendMessage({
+                    action: 'download',
+                    dataUrl: reader.result,
+                    filename: 'latex_render.png'
+                });
+            }
+            addToHistory(currentLatex);
         };
         reader.readAsDataURL(currentBlob);
     });
@@ -356,6 +429,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!currentBlob) return;
         try {
             await navigator.clipboard.write([new ClipboardItem({ [currentBlob.type]: currentBlob })]);
+            addToHistory(currentLatex);
             copyBtn.textContent = 'Copied!';
             copyBtn.classList.add('copied');
             setTimeout(() => {
