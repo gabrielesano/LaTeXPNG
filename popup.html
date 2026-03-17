@@ -6,7 +6,17 @@
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-    <h2>LaTeX to PNG Converter</h2>
+    <div class="popup-header">
+        <h2>LaTeX to PNG Converter</h2>
+        <button id="openTabBtn" class="open-tab-btn" title="Open in new tab">
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor"
+                 stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8A1.5 1.5 0 0 0 13 12.5V9"/>
+                <polyline points="10,2 14,2 14,6"/>
+                <line x1="14" y1="2" x2="7" y2="9"/>
+            </svg>
+        </button>
+    </div>
     
     <textarea id="latexInput" rows="5">\frac{n!}{k!(n-k)!} = \binom{n}{k}</textarea>
     

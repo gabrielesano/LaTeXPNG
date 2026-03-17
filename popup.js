@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const bookmarkCurrentBtn = document.getElementById('bookmarkCurrentBtn');
     const loadingMsg = document.getElementById('loadingMsg');
     const errorMsg = document.getElementById('errorMsg');
+    const openTabBtn = document.getElementById('openTabBtn');
 
     // Settings
     const colorSwatches = document.querySelectorAll('.color-swatch');
@@ -27,6 +28,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // ===================== State =====================
     let debounceTimer;
+    let draftTimer;
     let currentBlob = null;      // PNG blob for download/copy
     let previewBlobUrl = null;    // blob URL for the <img> preview
     let pendingSvgBlobUrl = null; // track SVG blob URL for leak prevention
@@ -47,10 +49,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function loadAll(callback) {
         if (!storage) { callback(); return; }
-        storage.get(['settings', 'history', 'bookmarks'], (data) => {
+        storage.get(['settings', 'history', 'bookmarks', 'draft'], (data) => {
             if (data.settings) settings = { ...settings, ...data.settings };
             if (data.history) history = data.history;
             if (data.bookmarks) bookmarks = data.bookmarks;
+            if (data.draft) latexInput.value = data.draft;
             callback();
         });
     }
@@ -63,6 +66,15 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     function saveBookmarks() {
         if (storage) storage.set({ bookmarks });
+    }
+    function saveDraft() {
+        if (!storage) return;
+        const val = latexInput.value;
+        if (val) {
+            storage.set({ draft: val });
+        } else {
+            storage.remove('draft');
+        }
     }
 
     // ===================== Settings UI =====================
@@ -160,6 +172,7 @@ document.addEventListener('DOMContentLoaded', function () {
         latexInput.value = latex;
         latexInput.focus();
         hideDropdown();
+        saveDraft();
         renderLatex();
     }
 
@@ -664,6 +677,8 @@ document.addEventListener('DOMContentLoaded', function () {
     latexInput.addEventListener('input', () => {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(renderLatex, 500);
+        clearTimeout(draftTimer);
+        draftTimer = setTimeout(saveDraft, 500);
         updateAutocomplete();
     });
 
@@ -704,6 +719,12 @@ document.addEventListener('DOMContentLoaded', function () {
         toggleBookmark(currentLatex);
     });
 
+    openTabBtn.addEventListener('click', () => {
+        if (typeof chrome !== 'undefined' && chrome.tabs) {
+            chrome.tabs.create({ url: chrome.runtime.getURL('popup.html') });
+        }
+    });
+
     // ===================== Init =====================
     loadAll(() => {
         applySettingsToUI();
@@ -712,6 +733,11 @@ document.addEventListener('DOMContentLoaded', function () {
         // Render initial equation
         setTimeout(renderLatex, 50);
     });
+
+    // Hide the button when already running as a full tab (viewport wider than popup)
+    if (document.documentElement.clientWidth > 500) {
+        openTabBtn.classList.add('hidden');
+    }
 
     latexInput.focus();
     latexInput.select();

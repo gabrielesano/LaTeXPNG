@@ -7,7 +7,8 @@
   "scripts": {
     "lint": "eslint popup.js background.js",
     "lint:fix": "eslint popup.js background.js --fix",
-    "validate": "python3 validate.py"
+    "validate": "python3 validate.py",
+    "build": "bash build.sh"
   },
   "devDependencies": {
     "eslint": "^9.0.0",
