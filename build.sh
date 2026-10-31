@@ -10,6 +10,7 @@ FILES=(
     background.js
     mathjax-config.js
     theme-init.js
+    LICENSE
     lib/
     images/
 )

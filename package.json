@@ -4,6 +4,7 @@
   "description": "LaTeX to PNG Chrome Extension",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "lint": "eslint popup.js background.js",
     "lint:fix": "eslint popup.js background.js --fix",
