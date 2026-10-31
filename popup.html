@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <title>LaTeX to PNG</title>
     <link rel="stylesheet" href="popup.css">
+    <!-- Applies the saved theme before first paint (avoids a light flash in dark mode) -->
+    <script src="theme-init.js"></script>
 </head>
 <body>
     <div class="popup-header">
@@ -88,8 +90,6 @@
             <p class="empty-msg hidden" id="bookmarksEmpty">No bookmarked equations.</p>
         </div>
     </div>
-
-    <div id="mathjax-container" style="display: none;"></div>
 
     <script src="mathjax-config.js"></script>
     <script src="lib/tex-svg-full.js"></script>

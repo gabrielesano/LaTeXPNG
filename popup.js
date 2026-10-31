@@ -27,14 +27,21 @@ document.addEventListener('DOMContentLoaded', function () {
     const historyEmpty = document.getElementById('historyEmpty');
     const bookmarksEmpty = document.getElementById('bookmarksEmpty');
 
+    const IS_EXTENSION = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+
     // ===================== State =====================
+    const INPUT_DELAY    = 500; // debounce after typing
+    const SETTINGS_DELAY = 120; // debounce for continuous controls (padding slider, colour picker)
+    const CSS_DPI        = 96;  // scaleFactor 1 == 96 DPI
+
     let debounceTimer;
     let draftTimer;
     let currentBlob = null;      // PNG blob for download/copy
-    let previewBlobUrl = null;    // blob URL for the <img> preview
-    let pendingSvgBlobUrl = null; // track SVG blob URL for leak prevention
+    let previewBlobUrl = null;   // blob URL for the <img> preview
+    let cachedSvg = null;        // { latex, svg } from the last successful typeset
     let currentLatex = '';
     let renderGeneration = 0;    // incremented on each render; guards stale async callbacks
+    let suppressAutocomplete = false; // set while we insert text programmatically
 
     // Defaults
     let settings = {
@@ -46,7 +53,8 @@ document.addEventListener('DOMContentLoaded', function () {
     let bookmarks = []; // [{ latex, timestamp }]
 
     // ===================== Theme =====================
-    let currentTheme = 'system'; // 'system' | 'light' | 'dark'
+    // Preference: 'system' | 'light' | 'dark'. 'system' follows the OS setting.
+    let themePref = 'system';
 
     const THEME_CYCLE = { system: 'light', light: 'dark', dark: 'system' };
 
@@ -63,13 +71,27 @@ document.addEventListener('DOMContentLoaded', function () {
         dark:   '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10.5a6 6 0 0 1-7.5-7.5A6 6 0 1 0 13 10.5z"/></svg>',
     };
 
-    function applyTheme(theme) {
-        currentTheme = theme;
-        document.documentElement.dataset.theme = theme;
-        themeToggleBtn.innerHTML = THEME_ICONS[theme];
-        themeToggleBtn.title = THEME_LABELS[theme];
-        themeToggleBtn.setAttribute('aria-label', THEME_LABELS[theme]);
+    const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    // Keep in sync with theme-init.js
+    function resolveTheme(pref) {
+        return pref === 'dark' || (pref === 'system' && darkQuery.matches) ? 'dark' : 'light';
     }
+
+    function applyTheme(pref) {
+        if (!THEME_CYCLE[pref]) pref = 'system';
+        themePref = pref;
+        document.documentElement.dataset.theme = resolveTheme(pref);
+        themeToggleBtn.innerHTML = THEME_ICONS[pref];
+        themeToggleBtn.title = THEME_LABELS[pref];
+        themeToggleBtn.setAttribute('aria-label', THEME_LABELS[pref]);
+        // chrome.storage is async; theme-init.js reads this mirror before first paint
+        try { localStorage.setItem('theme', JSON.stringify(pref)); } catch {}
+    }
+
+    darkQuery.addEventListener('change', () => {
+        if (themePref === 'system') applyTheme('system');
+    });
 
     // ===================== Storage helpers =====================
     // Guard against running outside the extension context (e.g. opening popup.html directly).
@@ -122,32 +144,33 @@ document.addEventListener('DOMContentLoaded', function () {
         paddingValue.textContent = settings.padding;
     }
 
-    function setColor(color) {
+    function setColor(color, delay) {
         settings.textColor = color;
         colorSwatches.forEach((sw) => {
             sw.classList.toggle('active', sw.dataset.color === color);
         });
         customColorInput.value = color;
         saveSettings();
-        renderLatex();
+        scheduleRender(delay);
     }
 
     colorSwatches.forEach((sw) => {
-        sw.addEventListener('click', () => setColor(sw.dataset.color));
+        sw.addEventListener('click', () => setColor(sw.dataset.color, 0));
     });
-    customColorInput.addEventListener('input', () => setColor(customColorInput.value));
+    // 'input' fires continuously while dragging inside the picker
+    customColorInput.addEventListener('input', () => setColor(customColorInput.value, SETTINGS_DELAY));
 
     dpiSelect.addEventListener('change', () => {
         settings.scaleFactor = parseFloat(dpiSelect.value);
         saveSettings();
-        renderLatex();
+        scheduleRender(0);
     });
 
     paddingRange.addEventListener('input', () => {
         settings.padding = parseInt(paddingRange.value, 10);
         paddingValue.textContent = settings.padding;
         saveSettings();
-        renderLatex();
+        scheduleRender(SETTINGS_DELAY);
     });
 
     // ===================== Tabs =====================
@@ -167,18 +190,44 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updateBookmarkCurrentBtn() {
-        const active = currentLatex && isBookmarked(currentLatex);
+        const active = !!currentLatex && isBookmarked(currentLatex);
         bookmarkCurrentBtn.textContent = active ? '★' : '☆';
         bookmarkCurrentBtn.classList.toggle('active', active);
     }
 
+    // Temporarily swaps a button's label (e.g. "Copied!") and colour class.
+    function flashButton(btn, text, cls) {
+        if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+        clearTimeout(btn._flashTimer);
+        btn.classList.remove('copied', 'failed');
+        btn.textContent = text;
+        btn.classList.add(cls);
+        btn._flashTimer = setTimeout(() => {
+            btn.textContent = btn.dataset.label;
+            btn.classList.remove(cls);
+        }, 2000);
+    }
+
+    // Replaces [start, end) in the textarea, then selects [selStart, selEnd).
+    // Uses execCommand so the edit lands on the native undo stack (Ctrl+Z works);
+    // assigning latexInput.value directly would wipe the undo history.
+    function replaceRange(start, end, text, selStart, selEnd = selStart) {
+        latexInput.focus();
+        latexInput.setSelectionRange(start, end);
+        suppressAutocomplete = true;
+        const ok = document.execCommand('insertText', false, text);
+        if (!ok) {
+            latexInput.setRangeText(text, start, end, 'end');
+            latexInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        suppressAutocomplete = false;
+        latexInput.setSelectionRange(selStart, selEnd);
+    }
+
     // ===================== History & Bookmarks logic =====================
     function addToHistory(latex) {
-        // Remove duplicate if present
         history = history.filter((h) => h.latex !== latex);
-        // Prepend
         history.unshift({ latex, timestamp: Date.now() });
-        // Keep max 5
         if (history.length > 5) history = history.slice(0, 5);
         saveHistory();
         renderHistoryList();
@@ -198,19 +247,19 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function loadEquation(latex) {
-        latexInput.value = latex;
-        latexInput.focus();
         hideDropdown();
+        replaceRange(0, latexInput.value.length, latex, latex.length);
         saveDraft();
         renderLatex();
     }
 
     // ===================== Render lists =====================
-    function renderHistoryList() {
-        historyList.innerHTML = '';
-        historyEmpty.classList.toggle('hidden', history.length > 0);
+    // buildAction(latex) returns the trailing button for each row.
+    function renderEquationList(listEl, emptyEl, items, buildAction) {
+        listEl.replaceChildren();
+        emptyEl.classList.toggle('hidden', items.length > 0);
 
-        history.forEach((item) => {
+        items.forEach((item) => {
             const li = document.createElement('li');
 
             const span = document.createElement('span');
@@ -219,160 +268,221 @@ document.addEventListener('DOMContentLoaded', function () {
             span.title = item.latex;
             span.addEventListener('click', () => loadEquation(item.latex));
 
-            const star = document.createElement('button');
-            star.className = 'eq-star' + (isBookmarked(item.latex) ? ' bookmarked' : '');
-            star.textContent = isBookmarked(item.latex) ? '★' : '☆';
-            star.title = isBookmarked(item.latex) ? 'Remove bookmark' : 'Bookmark';
-            star.addEventListener('click', (e) => {
-                e.stopPropagation();
-                toggleBookmark(item.latex);
-            });
-
-            li.appendChild(span);
-            li.appendChild(star);
-            historyList.appendChild(li);
+            li.append(span, buildAction(item.latex));
+            listEl.appendChild(li);
         });
 
-        showLibrarySectionIfNeeded();
-    }
-
-    function renderBookmarksList() {
-        bookmarksList.innerHTML = '';
-        bookmarksEmpty.classList.toggle('hidden', bookmarks.length > 0);
-
-        bookmarks.forEach((item) => {
-            const li = document.createElement('li');
-
-            const span = document.createElement('span');
-            span.className = 'eq-latex';
-            span.textContent = item.latex;
-            span.title = item.latex;
-            span.addEventListener('click', () => loadEquation(item.latex));
-
-            const del = document.createElement('button');
-            del.className = 'eq-delete';
-            del.textContent = '✕';
-            del.title = 'Remove bookmark';
-            del.addEventListener('click', (e) => {
-                e.stopPropagation();
-                toggleBookmark(item.latex);
-            });
-
-            li.appendChild(span);
-            li.appendChild(del);
-            bookmarksList.appendChild(li);
-        });
-
-        showLibrarySectionIfNeeded();
-    }
-
-    function showLibrarySectionIfNeeded() {
         const hasContent = history.length > 0 || bookmarks.length > 0;
         librarySection.classList.toggle('hidden', !hasContent);
     }
 
-    // ===================== Core Rendering =====================
-    function cleanup() {
-        if (pendingSvgBlobUrl) {
-            URL.revokeObjectURL(pendingSvgBlobUrl);
-            pendingSvgBlobUrl = null;
-        }
-        if (previewBlobUrl) {
-            URL.revokeObjectURL(previewBlobUrl);
-            previewBlobUrl = null;
-        }
-        currentBlob = null;
+    function makeListButton(className, text, title, onClick) {
+        const btn = document.createElement('button');
+        btn.className = className;
+        btn.textContent = text;
+        btn.title = title;
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onClick();
+        });
+        return btn;
     }
 
-    const renderLatex = () => {
+    function renderHistoryList() {
+        renderEquationList(historyList, historyEmpty, history, (latex) => {
+            const marked = isBookmarked(latex);
+            return makeListButton(
+                'eq-star' + (marked ? ' bookmarked' : ''),
+                marked ? '★' : '☆',
+                marked ? 'Remove bookmark' : 'Bookmark',
+                () => toggleBookmark(latex)
+            );
+        });
+    }
+
+    function renderBookmarksList() {
+        renderEquationList(bookmarksList, bookmarksEmpty, bookmarks, (latex) =>
+            makeListButton('eq-delete', '✕', 'Remove bookmark', () => toggleBookmark(latex))
+        );
+    }
+
+    // ===================== PNG metadata (pHYs) =====================
+    // Canvas PNGs carry no resolution info, so Word/PowerPoint/etc. assume 96 DPI
+    // and a "600 DPI" image is inserted 6x too large. Writing a pHYs chunk makes
+    // the file declare its real DPI so it is placed at the intended physical size.
+    const CRC_TABLE = (() => {
+        const table = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) {
+            let c = n;
+            for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+            table[n] = c >>> 0;
+        }
+        return table;
+    })();
+
+    function crc32(bytes) {
+        let c = 0xffffffff;
+        for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+        return (c ^ 0xffffffff) >>> 0;
+    }
+
+    async function withDpi(blob, dpi) {
+        const png = new Uint8Array(await blob.arrayBuffer());
+        const view = new DataView(png.buffer);
+        const ppm = Math.round(dpi / 0.0254); // pixels per metre
+
+        const chunk = new Uint8Array(21); // length(4) + "pHYs"(4) + data(9) + crc(4)
+        const cv = new DataView(chunk.buffer);
+        cv.setUint32(0, 9);
+        chunk.set([0x70, 0x48, 0x59, 0x73], 4); // "pHYs"
+        cv.setUint32(8, ppm);
+        cv.setUint32(12, ppm);
+        chunk[16] = 1; // unit: metre
+        cv.setUint32(17, crc32(chunk.subarray(4, 17)));
+
+        // Walk the chunks (after the 8-byte signature): replace an existing pHYs,
+        // otherwise insert ours before the first IDAT (pHYs must precede image data).
+        let pos = 8;
+        while (pos + 8 <= png.length) {
+            const len = view.getUint32(pos);
+            const type = String.fromCharCode(...png.subarray(pos + 4, pos + 8));
+            if (type === 'pHYs') {
+                return new Blob([png.subarray(0, pos), chunk, png.subarray(pos + 12 + len)], { type: 'image/png' });
+            }
+            if (type === 'IDAT') {
+                return new Blob([png.subarray(0, pos), chunk, png.subarray(pos)], { type: 'image/png' });
+            }
+            pos += 12 + len;
+        }
+        return blob; // malformed PNG — leave untouched
+    }
+
+    // ===================== Core Rendering =====================
+    // Two stages:
+    //   typeset   — MathJax LaTeX → SVG; only re-run when the LaTeX changes (cached)
+    //   rasterize — SVG → PNG via canvas; re-run for colour / DPI / padding changes
+
+    function scheduleRender(delay = INPUT_DELAY) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(renderLatex, delay);
+    }
+
+    // Errors carrying a message meant for the user
+    function userError(message) {
+        const err = new Error(message);
+        err.userMessage = message;
+        return err;
+    }
+
+    function typeset(latex) {
+        // Clear equation labels/numbers from previous renders, otherwise
+        // re-rendering an equation with \label{} reports a duplicate label.
+        MathJax.texReset();
+        return MathJax.tex2svgPromise(latex, { display: true }).then((node) => {
+            const svg = node.querySelector('svg');
+            // MathJax does not reject on TeX errors: it renders the message
+            // in red inside the SVG. Detect that and surface it as an error.
+            const merror = svg.querySelector('[data-mjx-error]');
+            if (merror) throw userError(merror.getAttribute('data-mjx-error'));
+            cachedSvg = { latex, svg };
+            return svg;
+        });
+    }
+
+    function rasterize(svg, { textColor, scaleFactor: sf, padding: pad }) {
+        return new Promise((resolve, reject) => {
+            const clone = svg.cloneNode(true);
+            clone.style.backgroundColor = 'transparent';
+            clone.setAttribute('color', textColor);
+            clone.style.color = textColor;
+
+            const svgBlob = new Blob([clone.outerHTML], { type: 'image/svg+xml;charset=utf-8' });
+            const svgUrl = URL.createObjectURL(svgBlob);
+            const image = new Image();
+
+            image.onload = () => {
+                URL.revokeObjectURL(svgUrl);
+                const canvas = document.createElement('canvas');
+                canvas.width  = Math.round((image.width  + pad * 2) * sf);
+                canvas.height = Math.round((image.height + pad * 2) * sf);
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(image, pad * sf, pad * sf, image.width * sf, image.height * sf);
+
+                // toBlob never creates a huge data URL string; it yields null when
+                // the canvas exceeds the engine's size limit.
+                canvas.toBlob((blob) => {
+                    if (blob) resolve(blob);
+                    else reject(userError('Image too large — try a lower resolution.'));
+                }, 'image/png');
+            };
+
+            image.onerror = () => {
+                URL.revokeObjectURL(svgUrl);
+                reject(userError('Failed to render SVG to image.'));
+            };
+
+            image.src = svgUrl;
+        });
+    }
+
+    function renderLatex() {
+        clearTimeout(debounceTimer);
         const latexCode = latexInput.value.trim();
         currentLatex = latexCode;
         const generation = ++renderGeneration;
+        const isCurrent = () => generation === renderGeneration;
 
-        cleanup();
+        currentBlob = null;
+        updateBookmarkCurrentBtn();
 
         if (!latexCode) {
             resultContainer.classList.add('hidden');
             actionButtons.classList.add('hidden');
             errorMsg.classList.add('hidden');
             loadingMsg.classList.add('hidden');
-            updateBookmarkCurrentBtn();
             return;
         }
 
-        // Show loading
-        resultContainer.classList.remove('hidden');
-        loadingMsg.classList.remove('hidden');
-        errorMsg.classList.add('hidden');
-        resultImg.classList.add('hidden');
-        actionButtons.classList.add('hidden');
+        const cached = cachedSvg && cachedSvg.latex === latexCode;
+        if (!cached) {
+            // Only a new typeset shows the loading state; re-rasterizing for a
+            // settings change keeps the previous preview visible (no flicker).
+            resultContainer.classList.remove('hidden');
+            loadingMsg.classList.remove('hidden');
+            errorMsg.classList.add('hidden');
+            resultImg.classList.add('hidden');
+            actionButtons.classList.add('hidden');
+        }
 
-        MathJax.tex2svgPromise(latexCode, { display: true })
-            .then((node) => {
-                if (generation !== renderGeneration) return;
-
-                const svgElement = node.querySelector('svg');
-                svgElement.style.backgroundColor = 'transparent';
-
-                // Apply text color
-                svgElement.setAttribute('color', settings.textColor);
-                svgElement.style.color = settings.textColor;
-
-                const svgMarkup = svgElement.outerHTML;
-                const image = new Image();
-                const svgBlob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
-                const svgUrl = URL.createObjectURL(svgBlob);
-                pendingSvgBlobUrl = svgUrl;
-
-                image.onload = () => {
-                    const sf = settings.scaleFactor;
-                    const pad = settings.padding;
-                    const canvas = document.createElement('canvas');
-                    canvas.width = (image.width + pad * 2) * sf;
-                    canvas.height = (image.height + pad * 2) * sf;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(image, pad * sf, pad * sf, image.width * sf, image.height * sf);
-
-                    // Use toBlob — never creates a huge data URL string
-                    canvas.toBlob((blob) => {
-                        if (generation !== renderGeneration) return;
-
-                        if (!blob) {
-                            showError('Failed to generate PNG.');
-                            return;
-                        }
-
-                        currentBlob = blob;
-                        previewBlobUrl = URL.createObjectURL(blob);
-                        resultImg.src = previewBlobUrl;
-
-                        loadingMsg.classList.add('hidden');
-                        resultImg.classList.remove('hidden');
-                        resultContainer.classList.remove('hidden');
-                        actionButtons.classList.remove('hidden');
-
-                        URL.revokeObjectURL(svgUrl);
-                        pendingSvgBlobUrl = null;
-
-                        updateBookmarkCurrentBtn();
-                    }, 'image/png');
-                };
-
-                image.onerror = () => {
-                    URL.revokeObjectURL(svgUrl);
-                    pendingSvgBlobUrl = null;
-                    if (generation !== renderGeneration) return;
-                    showError('Failed to render SVG to image.');
-                };
-
-                image.src = svgUrl;
+        const opts = { ...settings }; // snapshot: settings may change mid-render
+        (cached ? Promise.resolve(cachedSvg.svg) : typeset(latexCode))
+            .then((svg) => isCurrent() ? rasterize(svg, opts) : null)
+            .then((blob) => blob && isCurrent() ? withDpi(blob, opts.scaleFactor * CSS_DPI) : null)
+            .then((blob) => {
+                if (blob && isCurrent()) showResult(blob);
             })
             .catch((err) => {
-                if (generation !== renderGeneration) return;
-                console.error('MathJax Rendering Error:', err);
-                showError('Invalid LaTeX — check your syntax.');
+                if (!isCurrent()) return;
+                console.error('Rendering error:', err);
+                showError(err.userMessage || 'Invalid LaTeX — check your syntax.');
             });
-    };
+    }
+
+    function showResult(blob) {
+        currentBlob = blob;
+        const url = URL.createObjectURL(blob);
+        resultImg.src = url;
+        // Revoke the old URL only after swapping, so the preview never blanks
+        if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
+        previewBlobUrl = url;
+
+        loadingMsg.classList.add('hidden');
+        errorMsg.classList.add('hidden');
+        resultImg.classList.remove('hidden');
+        resultContainer.classList.remove('hidden');
+        actionButtons.classList.remove('hidden');
+        updateBookmarkCurrentBtn();
+    }
 
     function showError(msg) {
         loadingMsg.classList.add('hidden');
@@ -395,6 +505,7 @@ document.addEventListener('DOMContentLoaded', function () {
     ]);
 
     function handleBracketCompletion(e) {
+        if (e.defaultPrevented) return;
         if (!(e.key in BRACKET_PAIRS)) return;
         hideDropdown();
 
@@ -407,18 +518,11 @@ document.addEventListener('DOMContentLoaded', function () {
         e.preventDefault();
 
         if (start !== end) {
-            const selected = val.slice(start, end);
-            latexInput.value = val.slice(0, start) + e.key + selected + closer + val.slice(end);
-            latexInput.selectionStart = start + 1;
-            latexInput.selectionEnd = end + 1;
+            // Wrap the selection and keep it selected
+            replaceRange(start, end, e.key + val.slice(start, end) + closer, start + 1, end + 1);
         } else {
-            latexInput.value = val.slice(0, start) + e.key + closer + val.slice(start);
-            latexInput.selectionStart = start + 1;
-            latexInput.selectionEnd = start + 1;
+            replaceRange(start, end, e.key + closer, start + 1);
         }
-
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(renderLatex, 500);
     }
 
     function handleEnvironmentCompletion(e) {
@@ -441,13 +545,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const indent = lineText.match(/^(\s*)/)[1];
         const inner = '\n' + indent + '    ';
         const closing = '\n' + indent + '\\end{' + envName + '}';
-        latexInput.value = val.slice(0, pos) + inner + closing + val.slice(pos);
-        const cursorPos = pos + inner.length;
-        latexInput.selectionStart = cursorPos;
-        latexInput.selectionEnd = cursorPos;
-
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(renderLatex, 500);
+        replaceRange(pos, pos, inner + closing, pos + inner.length);
     }
 
     // ===================== Command Autocomplete =====================
@@ -592,36 +690,22 @@ document.addEventListener('DOMContentLoaded', function () {
         };
     }
 
-    function scrollAcItemIntoView() {
-        if (acIndex < 0) return;
-        const items = acDropdown.querySelectorAll('.latex-ac-item');
-        if (items[acIndex]) items[acIndex].scrollIntoView({ block: 'nearest' });
-    }
-
     function setAcIndex(index) {
-        acDropdown.querySelectorAll('.latex-ac-item').forEach((el, i) => {
-            el.classList.toggle('active', i === index);
-        });
+        const items = acDropdown.children;
+        for (let i = 0; i < items.length; i++) items[i].classList.toggle('active', i === index);
         acIndex = index;
-        scrollAcItemIntoView();
+        if (items[index]) items[index].scrollIntoView({ block: 'nearest' });
     }
 
     function applyCompletion(item) {
         const pos   = latexInput.selectionStart;
-        const val   = latexInput.value;
         const start = pos - acQuery.length;
-        latexInput.value = val.slice(0, start) + item.insert + val.slice(pos);
-        const newCursor = start + item.insert.length - item.cursorBack;
-        latexInput.selectionStart = newCursor;
-        latexInput.selectionEnd   = newCursor;
         hideDropdown();
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(renderLatex, 500);
-        latexInput.focus();
+        replaceRange(start, pos, item.insert, start + item.insert.length - item.cursorBack);
     }
 
     function showDropdown(coords) {
-        acDropdown.innerHTML = '';
+        acDropdown.replaceChildren();
         acItems.forEach((item, i) => {
             const div = document.createElement('div');
             div.className = 'latex-ac-item' + (i === acIndex ? ' active' : '');
@@ -711,42 +795,49 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     latexInput.addEventListener('input', () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(renderLatex, 500);
+        scheduleRender();
         clearTimeout(draftTimer);
         draftTimer = setTimeout(saveDraft, 500);
-        updateAutocomplete();
+        if (suppressAutocomplete) hideDropdown();
+        else updateAutocomplete();
     });
 
+    // The PNG goes to background.js as a data URL: the service worker outlives the
+    // popup, which closes as soon as Chrome shows a "Save as" dialog (a blob: URL
+    // owned by the popup would be revoked with it).
     downloadBtn.addEventListener('click', () => {
-        if (!currentBlob) return;
+        if (!currentBlob || !IS_EXTENSION) return;
+        const latex = currentLatex;
         const reader = new FileReader();
         reader.onload = () => {
-            if (typeof chrome !== 'undefined' && chrome.runtime) {
-                chrome.runtime.sendMessage({
-                    action: 'download',
-                    dataUrl: reader.result,
-                    filename: 'latex_render.png'
-                });
-            }
-            addToHistory(currentLatex);
+            chrome.runtime.sendMessage(
+                { action: 'download', dataUrl: reader.result, filename: 'latex_render.png' },
+                (res) => {
+                    const error = chrome.runtime.lastError?.message || res?.error;
+                    if (res?.success) {
+                        addToHistory(latex);
+                        flashButton(downloadBtn, 'Saved!', 'copied');
+                    } else if (!/cancel/i.test(error || '')) {
+                        console.error('Download failed:', error);
+                        flashButton(downloadBtn, 'Save failed', 'failed');
+                    }
+                }
+            );
         };
+        reader.onerror = () => flashButton(downloadBtn, 'Save failed', 'failed');
         reader.readAsDataURL(currentBlob);
     });
 
     copyBtn.addEventListener('click', async () => {
         if (!currentBlob) return;
+        const latex = currentLatex;
         try {
             await navigator.clipboard.write([new ClipboardItem({ [currentBlob.type]: currentBlob })]);
-            addToHistory(currentLatex);
-            copyBtn.textContent = 'Copied!';
-            copyBtn.classList.add('copied');
-            setTimeout(() => {
-                copyBtn.textContent = 'Copy Image';
-                copyBtn.classList.remove('copied');
-            }, 2000);
+            addToHistory(latex);
+            flashButton(copyBtn, 'Copied!', 'copied');
         } catch (err) {
             console.error('Failed to copy image:', err);
+            flashButton(copyBtn, 'Copy failed', 'failed');
         }
     });
 
@@ -756,7 +847,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     themeToggleBtn.addEventListener('click', () => {
-        const next = THEME_CYCLE[currentTheme] || 'system';
+        const next = THEME_CYCLE[themePref];
         applyTheme(next);
         if (storage) storage.set({ theme: next });
     });
@@ -772,8 +863,15 @@ document.addEventListener('DOMContentLoaded', function () {
         applySettingsToUI();
         renderHistoryList();
         renderBookmarksList();
-        // Render initial equation
-        setTimeout(renderLatex, 50);
+        // Render the initial equation once MathJax has finished starting up
+        if (window.MathJax?.startup?.promise) {
+            MathJax.startup.promise.then(renderLatex).catch((err) => {
+                console.error('MathJax startup failed:', err);
+                showError('MathJax failed to load.');
+            });
+        } else {
+            showError('MathJax failed to load.');
+        }
     });
 
     // Hide the button when already running as a full tab (opened via the button itself)

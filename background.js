@@ -4,7 +4,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             url: message.dataUrl,
             filename: message.filename || 'latex_render.png'
         }, (downloadId) => {
-            sendResponse({ success: !!downloadId });
+            sendResponse({ success: !!downloadId, error: chrome.runtime.lastError?.message });
         });
         return true; // keep channel open for async response
     }
