@@ -1,6 +1,6 @@
 {
   "name": "latex-to-png-chrome-ext",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "LaTeX to PNG Chrome Extension",
   "type": "module",
   "private": true,
