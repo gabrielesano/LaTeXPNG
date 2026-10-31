@@ -9,6 +9,7 @@ FILES=(
     popup.css
     background.js
     mathjax-config.js
+    theme-init.js
     lib/
     images/
 )

@@ -6,15 +6,18 @@ and keeps a history of recent equations with bookmarks for your favorites.
 - **Live preview** — renders as you type with debounced updates
 - **High-resolution output** — configurable DPI (150 / 300 / 600) for crisp PNGs at any size
 - **Transparent background** — paste equations directly into slides or documents
+- **Correct size in Word / PowerPoint** — the PNG embeds its DPI, so it is inserted at the intended physical size
+- **Clear error messages** — invalid LaTeX shows what is wrong instead of producing a broken image
 - **Customizable text color** — black, white, blue, red, or any custom color via color picker
 - **Adjustable padding** — slider control from 0 to 40px
-- **Download & copy** — save as PNG file or copy to clipboard with one click
+- **Download & copy** — save as PNG file or copy to clipboard with one click, with visual confirmation (or an error) on the button
 - **History** — remembers your last 5 equations (saved on download or copy, not while typing)
 - **Bookmarks** — star any equation to keep it permanently
 - **Draft persistence** — your current formula is automatically saved; close and reopen the popup without losing work
 - **Bracket auto-closing** — typing `(`, `[`, `{` or their `\`-prefixed variants inserts the matching closer automatically; wraps selected text if any
 - **Environment completion** — typing `\begin{align}` + Enter inserts `\end{align}` automatically (works with align, equation, matrix, cases, and more)
 - **Command autocomplete** — type `\` followed by letters to get a dropdown of matching LaTeX commands; navigate with arrows, select with Tab or Enter
+- **Light / dark / system theme** — applied before the popup paints, no flash
 - **Open in tab** — click the expand button to open the editor in a full browser tab for more space
 - **Offline** — MathJax is bundled locally, no internet required
 ## Installation
