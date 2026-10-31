@@ -86,6 +86,10 @@ LaTeX → MathJax (SVG) → canvas at the chosen DPI → PNG + pHYs (DPI) chunk
 
 Everything runs locally in the popup. The extension is built with [MathJax 3](https://www.mathjax.org).
 
+## Privacy
+
+The extension collects no data and makes no network requests. Your history, bookmarks and settings stay in your browser. See the [privacy policy](PRIVACY.md).
+
 ## License
 
 [MIT](LICENSE) © Gabriele Sano.
